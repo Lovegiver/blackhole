@@ -14,6 +14,9 @@ object TestConfigs {
 
             override fun posModelPath(): String =
                 "models/opennlp-fr-ud-gsd-pos-1.3-2.5.4.bin"
+
+            override fun sentenceModelPath(): String =
+                "models/opennlp-fr-ud-gsd-sentence-1.3-2.5.4.bin"
         }
 
     fun nlpConfig(): NlpConfig =
