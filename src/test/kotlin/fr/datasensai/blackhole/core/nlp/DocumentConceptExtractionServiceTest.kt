@@ -8,6 +8,10 @@ class DocumentConceptExtractionServiceTest {
 
     private val openNlpConfig = TestConfigs.openNlpConfig()
 
+    private val sentenceDetector = OpenNlpSentenceDetectorService(
+        openNlpConfig = openNlpConfig
+    )
+
     private val tokenizerService = TokenizerService(
         openNlpTokenizerService = OpenNlpTokenizerService(openNlpConfig)
     )
@@ -15,6 +19,11 @@ class DocumentConceptExtractionServiceTest {
     private val posTaggingService = PosTaggingService(
         tokenizerService = tokenizerService,
         openNlpConfig = openNlpConfig
+    )
+
+    private val sentenceSplitterService = SentenceSplitterService(
+        sentenceDetector = sentenceDetector,
+        posTaggingService = posTaggingService
     )
 
     private val textNormalizerService = TextNormalizerService()
@@ -49,7 +58,7 @@ class DocumentConceptExtractionServiceTest {
     )
 
     private val conceptCandidateService = ConceptCandidateService(
-        posTaggingService = posTaggingService,
+        sentenceSplitterService = sentenceSplitterService,
         nounPhraseCandidateService = nounPhraseCandidateService,
         ngramService = ngramService,
         conceptCandidateMerger = conceptCandidateMerger,

@@ -6,6 +6,10 @@ class ConceptExtractionExplorationTest {
 
     private val openNlpConfig = TestConfigs.openNlpConfig()
 
+    private val sentenceDetector = OpenNlpSentenceDetectorService(
+        openNlpConfig = openNlpConfig
+    )
+
     private val tokenizerService = TokenizerService(
         openNlpTokenizerService = OpenNlpTokenizerService(openNlpConfig)
     )
@@ -13,6 +17,11 @@ class ConceptExtractionExplorationTest {
     private val posTaggingService = PosTaggingService(
         tokenizerService = tokenizerService,
         openNlpConfig = openNlpConfig
+    )
+
+    private val sentenceSplitterService = SentenceSplitterService(
+        sentenceDetector = sentenceDetector,
+        posTaggingService = posTaggingService
     )
 
     private val nounPhraseCandidateService = NounPhraseCandidateService(
@@ -42,7 +51,7 @@ class ConceptExtractionExplorationTest {
     )
 
     private val service = ConceptCandidateService(
-        posTaggingService = posTaggingService,
+        sentenceSplitterService = sentenceSplitterService,
         nounPhraseCandidateService = nounPhraseCandidateService,
         ngramService = ngramService,
         conceptCandidateMerger = conceptCandidateMerger,

@@ -6,4 +6,5 @@ import io.smallrye.config.ConfigMapping
 interface OpenNlpConfig {
     fun tokenizerModelPath(): String
     fun posModelPath(): String
+    fun sentenceModelPath(): String
 }

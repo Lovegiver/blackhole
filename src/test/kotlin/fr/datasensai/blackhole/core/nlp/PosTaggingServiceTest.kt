@@ -36,6 +36,7 @@ class PosTaggingServiceTest {
         val badConfig = object : OpenNlpConfig {
             override fun tokenizerModelPath() = "models/opennlp-fr-ud-gsd-tokens-1.3-2.5.4.bin"
             override fun posModelPath() = "invalid.bin"
+            override fun sentenceModelPath() = ""
         }
 
         val tokenizer = TokenizerService(

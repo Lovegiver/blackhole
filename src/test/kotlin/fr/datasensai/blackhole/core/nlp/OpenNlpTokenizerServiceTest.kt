@@ -32,6 +32,7 @@ class OpenNlpTokenizerServiceTest {
         val badConfig = object : OpenNlpConfig {
             override fun tokenizerModelPath() = "invalid/path.bin"
             override fun posModelPath() = ""
+            override fun sentenceModelPath() = ""
         }
 
         val service = OpenNlpTokenizerService(badConfig)

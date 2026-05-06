@@ -9,6 +9,7 @@ blackhole:
     opennlp:
       tokenizer-model-path: ${BLACKHOLE_NLP_OPENNLP_TOKENIZER_MODEL_PATH:models/opennlp-fr-ud-gsd-tokens-1.3-2.5.4.bin}
       pos-model-path: ${BLACKHOLE_NLP_OPENNLP_POS_MODEL_PATH:models/opennlp-fr-ud-gsd-pos-1.3-2.5.4.bin}
+      sentence-model-path: ${BLACKHOLE_NLP_OPENNLP_SENTENCE_MODEL_PATH:models/opennlp-fr-ud-gsd-sentence-1.3-2.5.4.bin}
 
     scoring:
       noun-phrase-weight: ${BLACKHOLE_NLP_SCORING_NOUN_PHRASE_WEIGHT:5.0}
