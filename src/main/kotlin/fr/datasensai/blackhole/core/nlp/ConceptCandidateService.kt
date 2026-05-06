@@ -6,6 +6,7 @@ import jakarta.enterprise.context.ApplicationScoped
 @ApplicationScoped
 class ConceptCandidateService(
     private val sentenceSplitterService: SentenceSplitterService,
+    private val sentenceChunker: SentenceChunker,
     private val nounPhraseCandidateService: NounPhraseCandidateService,
     private val ngramService: NgramService,
     private val conceptCandidateMerger: ConceptCandidateMerger,
@@ -21,7 +22,10 @@ class ConceptCandidateService(
         val drafts = sentenceSplitterService
             .split(text)
             .flatMap { sentence ->
-                extractFromSentence(sentence)
+                sentenceChunker.chunk(sentence)
+            }
+            .flatMap { chunk ->
+                extractFromChunk(chunk)
             }
 
         val mergedCandidates = conceptCandidateMerger.merge(drafts)
@@ -31,14 +35,16 @@ class ConceptCandidateService(
             .sortedByDescending { it.score }
     }
 
-    private fun extractFromSentence(sentence: Sentence): List<ConceptCandidateDraft> {
+    private fun extractFromChunk(chunk: SentenceChunk): List<ConceptCandidateDraft> {
+        val posTokens = chunk.toPosTokens()
+
         val nounPhraseDrafts = nounPhraseCandidateService
-            .extract(sentence.tokens)
+            .extract(posTokens)
             .map { ConceptCandidateDraft.fromNounPhrase(it) }
 
         val ngramDrafts = ngramService
             .generate(
-                tokens = sentence.tokens,
+                tokens = posTokens,
                 minNgramSize = conceptExtractionConfig.minNgramSize(),
                 maxNgramSize = conceptExtractionConfig.maxNgramSize()
             )
