@@ -40,6 +40,10 @@ class ConceptExtractionExplorationTest {
         tokenFilterService = tokenFilterService
     )
 
+    private val sentenceChunker = SentenceChunker(
+        tokenQualificationService = tokenQualificationService
+    )
+
     private val ngramService = NgramService(
         tokenQualificationService = tokenQualificationService
     )
@@ -52,6 +56,7 @@ class ConceptExtractionExplorationTest {
 
     private val service = ConceptCandidateService(
         sentenceSplitterService = sentenceSplitterService,
+        sentenceChunker = sentenceChunker,
         nounPhraseCandidateService = nounPhraseCandidateService,
         ngramService = ngramService,
         conceptCandidateMerger = conceptCandidateMerger,
