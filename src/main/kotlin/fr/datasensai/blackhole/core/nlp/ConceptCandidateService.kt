@@ -21,7 +21,7 @@ class ConceptCandidateService(
             .map { ConceptCandidateDraft.fromNounPhrase(it) }
 
         val ngramDrafts = ngramService.generate(
-            tokens = rawTokens,
+            tokens = posTokens,
             minNgramSize = conceptExtractionConfig.minNgramSize(),
             maxNgramSize = conceptExtractionConfig.maxNgramSize()
         ).map {

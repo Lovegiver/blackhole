@@ -4,11 +4,11 @@ import jakarta.enterprise.context.ApplicationScoped
 
 @ApplicationScoped
 class NgramService(
-    private val tokenFilterService: TokenFilterService
+    private val tokenQualificationService: TokenQualificationService
 ) {
 
     fun generate(
-        tokens: List<String>,
+        tokens: List<PosToken>,
         minNgramSize: Int,
         maxNgramSize: Int
     ): List<NgramCandidate> {
@@ -17,72 +17,27 @@ class NgramService(
             "maxNgramSize must be greater than or equal to minNgramSize"
         }
 
-        val normalizedTokens = tokens
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
+        val qualifiedTokens = tokenQualificationService.qualify(tokens)
 
-        if (normalizedTokens.isEmpty()) {
+        if (qualifiedTokens.isEmpty()) {
             return emptyList()
         }
 
         val results = mutableListOf<NgramCandidate>()
 
         for (size in minNgramSize..maxNgramSize) {
-            if (size > normalizedTokens.size) continue
+            if (size > qualifiedTokens.size) continue
 
-            for (start in 0..normalizedTokens.size - size) {
-                val slice = normalizedTokens.subList(start, start + size)
+            for (start in 0..qualifiedTokens.size - size) {
+                val slice = qualifiedTokens.subList(start, start + size)
+                val window = NgramWindow(slice)
 
-                if (isValidNgram(slice)) {
-                    results.add(
-                        NgramCandidate(
-                            text = slice.joinToString(" ")
-                        )
-                    )
+                if (window.isValid()) {
+                    results.add(window.toCandidate())
                 }
             }
         }
 
         return results.distinctBy { it.text.lowercase() }
-    }
-
-    private fun isValidNgram(tokens: List<String>): Boolean {
-        if (tokens.isEmpty()) {
-            return false
-        }
-
-        if (tokens.any { isPunctuationOnly(it) }) {
-            return false
-        }
-
-        if (!tokenFilterService.containsAtLeastOneSignificantToken(tokens)) {
-            return false
-        }
-
-        if (tokenFilterService.isAllStopwords(tokens)) {
-            return false
-        }
-
-        if (startsWithStopword(tokens)) {
-            return false
-        }
-
-        if (endsWithStopword(tokens)) {
-            return false
-        }
-
-        return true
-    }
-
-    private fun startsWithStopword(tokens: List<String>): Boolean {
-        return tokenFilterService.isStopword(tokens.first())
-    }
-
-    private fun endsWithStopword(tokens: List<String>): Boolean {
-        return tokenFilterService.isStopword(tokens.last())
-    }
-
-    private fun isPunctuationOnly(token: String): Boolean {
-        return token.all { !it.isLetterOrDigit() }
     }
 }
