@@ -27,8 +27,12 @@ class ConceptExtractionExplorationTest {
         linguisticResourceService = linguisticResourceService
     )
 
-    private val ngramService = NgramService(
+    private val tokenQualificationService = TokenQualificationService(
         tokenFilterService = tokenFilterService
+    )
+
+    private val ngramService = NgramService(
+        tokenQualificationService = tokenQualificationService
     )
 
     private val conceptCandidateMerger = ConceptCandidateMerger(tokenFilterService, TextNormalizerService())

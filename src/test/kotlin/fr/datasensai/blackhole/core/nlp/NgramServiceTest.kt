@@ -14,19 +14,24 @@ class NgramServiceTest {
         linguisticResourceService = linguisticResourceService
     )
 
-    private val service = NgramService(
+    private val tokenQualificationService = TokenQualificationService(
         tokenFilterService = tokenFilterService
+    )
+
+    private val ngramService = NgramService(
+        tokenQualificationService = tokenQualificationService
     )
 
     @Test
     fun `should create ngrams from meaningful tokens`() {
-        val tokens = listOf("suivi", "personnalisé", "jeunes", "majeurs")
-
-        val result = service.generate(
-            tokens = tokens,
-            minNgramSize = 2,
-            maxNgramSize = 3
+        val tokens = listOf(
+            PosToken("suivi", "NOUN"),
+            PosToken("personnalisé", "ADJ"),
+            PosToken("jeunes", "ADJ"),
+            PosToken("majeurs", "NOUN")
         )
+
+        val result = ngramService.generate(tokens, 2, 3)
 
         assertTrue(result.contains(NgramCandidate("suivi personnalisé")))
         assertTrue(result.contains(NgramCandidate("jeunes majeurs")))
@@ -36,13 +41,13 @@ class NgramServiceTest {
 
     @Test
     fun `should reject ngrams made only of stopwords`() {
-        val tokens = listOf("de", "la", "loi")
-
-        val result = service.generate(
-            tokens = tokens,
-            minNgramSize = 2,
-            maxNgramSize = 2
+        val tokens = listOf(
+            PosToken("de", "ADP"),
+            PosToken("la", "DET"),
+            PosToken("loi", "NOUN")
         )
+
+        val result = ngramService.generate(tokens, 2, 2)
 
         assertFalse(result.contains(NgramCandidate("de la")))
         assertFalse(result.contains(NgramCandidate("la loi")))
@@ -50,13 +55,13 @@ class NgramServiceTest {
 
     @Test
     fun `should reject ngrams starting with stopword`() {
-        val tokens = listOf("de", "loi", "constitutionnelle")
-
-        val result = service.generate(
-            tokens = tokens,
-            minNgramSize = 2,
-            maxNgramSize = 2
+        val tokens = listOf(
+            PosToken("de", "ADP"),
+            PosToken("loi", "NOUN"),
+            PosToken("constitutionnelle", "ADJ")
         )
+
+        val result = ngramService.generate(tokens, 2, 2)
 
         assertFalse(result.contains(NgramCandidate("de loi")))
         assertTrue(result.contains(NgramCandidate("loi constitutionnelle")))
@@ -64,13 +69,13 @@ class NgramServiceTest {
 
     @Test
     fun `should reject ngrams ending with stopword`() {
-        val tokens = listOf("proposition", "de", "loi")
-
-        val result = service.generate(
-            tokens = tokens,
-            minNgramSize = 2,
-            maxNgramSize = 3
+        val tokens = listOf(
+            PosToken("proposition", "NOUN"),
+            PosToken("de", "ADP"),
+            PosToken("loi", "NOUN")
         )
+
+        val result = ngramService.generate(tokens, 2, 3)
 
         assertFalse(result.contains(NgramCandidate("proposition de")))
         assertTrue(result.contains(NgramCandidate("proposition de loi")))
@@ -78,13 +83,16 @@ class NgramServiceTest {
 
     @Test
     fun `should keep meaningful ngrams with internal stopwords`() {
-        val tokens = listOf("proposition", "de", "loi", "services", "de", "l’État")
-
-        val result = service.generate(
-            tokens = tokens,
-            minNgramSize = 3,
-            maxNgramSize = 3
+        val tokens = listOf(
+            PosToken("proposition", "NOUN"),
+            PosToken("de", "ADP"),
+            PosToken("loi", "NOUN"),
+            PosToken("services", "NOUN"),
+            PosToken("de", "ADP"),
+            PosToken("l’État", "NOUN")
         )
+
+        val result = ngramService.generate(tokens, 3, 3)
 
         assertTrue(result.contains(NgramCandidate("proposition de loi")))
         assertTrue(result.contains(NgramCandidate("services de l’État")))
@@ -93,13 +101,13 @@ class NgramServiceTest {
 
     @Test
     fun `should reject ngrams containing punctuation only token`() {
-        val tokens = listOf("enfance", ".", "Elle")
-
-        val result = service.generate(
-            tokens = tokens,
-            minNgramSize = 2,
-            maxNgramSize = 2
+        val tokens = listOf(
+            PosToken("enfance", "NOUN"),
+            PosToken(".", "PUNCT"),
+            PosToken("Elle", "PRON")
         )
+
+        val result = ngramService.generate(tokens, 2, 2)
 
         assertFalse(result.contains(NgramCandidate("enfance .")))
         assertFalse(result.contains(NgramCandidate(". Elle")))
@@ -107,13 +115,15 @@ class NgramServiceTest {
 
     @Test
     fun `should trim and ignore blank tokens`() {
-        val tokens = listOf(" ", "proposition", "de", "loi", "")
-
-        val result = service.generate(
-            tokens = tokens,
-            minNgramSize = 2,
-            maxNgramSize = 3
+        val tokens = listOf(
+            PosToken(" ", "SPACE"),
+            PosToken("proposition", "NOUN"),
+            PosToken("de", "ADP"),
+            PosToken("loi", "NOUN"),
+            PosToken("", "SPACE")
         )
+
+        val result = ngramService.generate(tokens, 2, 3)
 
         assertFalse(result.contains(NgramCandidate("proposition de")))
         assertFalse(result.contains(NgramCandidate("de loi")))
@@ -122,7 +132,7 @@ class NgramServiceTest {
 
     @Test
     fun `should return empty list when tokens are empty`() {
-        val result = service.generate(
+        val result = ngramService.generate(
             tokens = emptyList(),
             minNgramSize = 2,
             maxNgramSize = 3
@@ -133,8 +143,8 @@ class NgramServiceTest {
 
     @Test
     fun `should return empty list when ngram size is greater than token count`() {
-        val result = service.generate(
-            tokens = listOf("loi"),
+        val result = ngramService.generate(
+            tokens = listOf(PosToken("loi", "NOUN")),
             minNgramSize = 2,
             maxNgramSize = 3
         )
@@ -144,22 +154,18 @@ class NgramServiceTest {
 
     @Test
     fun `should reject invalid ngram sizes`() {
-        val tokens = listOf("proposition", "de", "loi")
+        val tokens = listOf(
+            PosToken("proposition", "NOUN"),
+            PosToken("de", "ADP"),
+            PosToken("loi", "NOUN")
+        )
 
         assertThrows<IllegalArgumentException> {
-            service.generate(
-                tokens = tokens,
-                minNgramSize = 0,
-                maxNgramSize = 3
-            )
+            ngramService.generate(tokens, 0, 3)
         }
 
         assertThrows<IllegalArgumentException> {
-            service.generate(
-                tokens = tokens,
-                minNgramSize = 3,
-                maxNgramSize = 2
-            )
+            ngramService.generate(tokens, 3, 2)
         }
     }
 }
