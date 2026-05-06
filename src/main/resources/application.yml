@@ -1,0 +1,22 @@
+blackhole:
+  nlp:
+    language: ${BLACKHOLE_NLP_LANGUAGE:fr}
+
+    resources:
+      mode: ${BLACKHOLE_NLP_RESOURCES_MODE:classpath}
+      base-path: ${BLACKHOLE_NLP_RESOURCES_BASE_PATH:nlp}
+
+    opennlp:
+      tokenizer-model-path: ${BLACKHOLE_NLP_OPENNLP_TOKENIZER_MODEL_PATH:models/opennlp-fr-ud-gsd-tokens-1.3-2.5.4.bin}
+      pos-model-path: ${BLACKHOLE_NLP_OPENNLP_POS_MODEL_PATH:models/opennlp-fr-ud-gsd-pos-1.3-2.5.4.bin}
+
+    scoring:
+      noun-phrase-weight: ${BLACKHOLE_NLP_SCORING_NOUN_PHRASE_WEIGHT:5.0}
+      ngram-weight: ${BLACKHOLE_NLP_SCORING_NGRAM_WEIGHT:3.0}
+      ner-weight: ${BLACKHOLE_NLP_SCORING_NER_WEIGHT:6.0}
+      occurrence-weight: ${BLACKHOLE_NLP_SCORING_OCCURRENCE_WEIGHT:1.0}
+      single-token-penalty: ${BLACKHOLE_NLP_SCORING_SINGLE_TOKEN_PENALTY:2.0}
+
+    extraction:
+      min-ngram-size: ${BLACKHOLE_NLP_EXTRACTION_MIN_NGRAM_SIZE:2}
+      max-ngram-size: ${BLACKHOLE_NLP_EXTRACTION_MAX_NGRAM_SIZE:3}
