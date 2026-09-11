@@ -1,65 +1,90 @@
-# black-hole-nlp
+# Black Hole
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Application Kotlin/Quarkus autoritative de Black Hole. Le socle courant utilise
+Java 21, Kotlin 2.3.21 et Quarkus 3.35.1.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+## Registre minimal de contenu
 
-## Running the application in dev mode
+Le premier vertical slice durable expose :
 
-You can run your application in dev mode that enables live coding using:
-
-```shell script
-./mvnw quarkus:dev
+```http
+PUT /v1/content-registry/{content_hash}
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+`content_hash` est exactement le SHA-256 hexadécimal minuscule, sur 64
+caractères, du contenu canonique. Le registre connaît uniquement la présence de
+ce hash : il ne stocke ni article, ni occurrence, ni artefact, ni état
+d'analyse.
 
-## Packaging and running the application
+Le premier appel répond `201 Created` avec `NEW`. Tout replay répond `200 OK`
+avec `KNOWN`, le même `content_id` et le même `registered_at` :
 
-The application can be packaged using:
+```json
+{
+  "content_id": "550e8400-e29b-41d4-a716-446655440000",
+  "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "result": "NEW",
+  "registered_at": "2026-09-11T15:00:00Z"
+}
+```
 
-```shell script
+Un hash invalide reçoit `400 Bad Request`. Une indisponibilité PostgreSQL
+reçoit une erreur `503` sûre, sans détail interne. Le contrat OpenAPI versionné
+se trouve dans `src/main/resources/META-INF/openapi.yaml` et est servi par
+Quarkus sous `/q/openapi`.
+
+## Atomicité et persistance
+
+La migration Flyway `V1__create_content_registry.sql` crée le schéma
+`blackhole` et son unique table métier :
+
+```text
+content_registry(id UUID, content_hash CHAR(64), registered_at TIMESTAMPTZ)
+```
+
+L'API ouvre une transaction courte en isolation `READ COMMITTED`. Le repository
+exécute `INSERT ... ON CONFLICT DO NOTHING RETURNING`; lorsque rien n'est
+inséré, une nouvelle instruction lit le gagnant concurrent avant le commit.
+Il n'effectue ni `SELECT` préalable, ni faux `UPDATE`, ni verrou consultatif.
+
+Flyway a été choisi parce qu'il est directement intégré au stack Quarkus/JDBC
+de l'application et versionne les migrations SQL sans introduire de second
+modèle de persistance. `migrate-at-start` reste désactivé : les migrations sont
+exécutées séparément avec le rôle migrateur. Le rôle runtime de l'application
+reçoit uniquement `USAGE` sur le schéma ainsi que `SELECT` et `INSERT` sur
+`content_registry`.
+
+n8n ne reçoit aucun credential PostgreSQL Black Hole, n'appelle aucune fonction
+PostgreSQL Black Hole et utilise uniquement l'API bornée.
+
+## Construction et tests
+
+```shell
+./mvnw test
 ./mvnw package
+docker build -f src/main/docker/Dockerfile.jvm -t labia/blackhole-dev:0.1.0 .
+docker build -f src/main/docker/Dockerfile.migration -t labia/blackhole-migrations:0.1.0 .
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+La suite lance un PostgreSQL 18.6 isolé avec Testcontainers, applique la vraie
+migration avec un rôle migrateur distinct, démarre l'API Quarkus avec le rôle
+runtime puis couvre les appels séquentiels et concurrents, les rejets, les
+contraintes PostgreSQL, les droits et l'OpenAPI. Le conteneur de test est détruit
+à la fin, avec toutes ses données.
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+Les scénarios BDD durables sont dans
+`src/test/resources/features/content-registry.feature`. Le déploiement et la
+preuve DEV Lab-IA sont versionnés dans `Lovegiver/lab-ia`, sous
+`infrastructure/blackhole/`.
 
-If you want to build an _über-jar_, execute the following command:
+## Configuration runtime
 
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
-```
+L'application attend les paramètres Quarkus standards suivants :
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+- `QUARKUS_DATASOURCE_JDBC_URL` ;
+- `QUARKUS_DATASOURCE_USERNAME` ;
+- `BLACKHOLE_DB_PASSWORD_FILE`, monté comme secret et lu par l'entrypoint ;
+- `QUARKUS_HTTP_PORT`, optionnel, `8080` par défaut.
 
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
-```
-
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
-
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/black-hole-nlp-1.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Related Guides
-
-- REST ([guide](https://quarkus.io/guides/rest)): Build RESTful web services and APIs using Jakarta REST (formerly
-  JAX-RS)
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus
-  REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
-- Kotlin ([guide](https://quarkus.io/guides/kotlin)): Write your services in Kotlin
-- Agroal - DB connection pool ([guide](https://quarkus.io/guides/datasource)): JDBC Datasources and connection pooling
-- SmallRye Health ([guide](https://quarkus.io/guides/smallrye-health)): Monitor service health
-- JDBC Driver - PostgreSQL ([guide](https://quarkus.io/guides/datasource)): Connect to the PostgreSQL database via JDBC
+L'image n'expose aucun port hôte par elle-même. Le déploiement Lab-IA la place
+uniquement sur le réseau interne DEV.
