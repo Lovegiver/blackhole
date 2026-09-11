@@ -1,0 +1,3 @@
+FROM flyway/flyway:13.5.0-alpine@sha256:2c76dde88aab87cf058957968d92629e1405810b8de6521afac5cb943e6cd3e4
+
+COPY src/main/resources/db/migration/ /flyway/sql/

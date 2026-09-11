@@ -21,3 +21,20 @@ blackhole:
     extraction:
       min-ngram-size: ${BLACKHOLE_NLP_EXTRACTION_MIN_NGRAM_SIZE:2}
       max-ngram-size: ${BLACKHOLE_NLP_EXTRACTION_MAX_NGRAM_SIZE:3}
+
+quarkus:
+  datasource:
+    db-kind: postgresql
+    devservices:
+      enabled: false
+    jdbc:
+      min-size: 1
+      max-size: 8
+      transaction-isolation-level: read-committed
+  flyway:
+    migrate-at-start: false
+  transaction-manager:
+    default-transaction-timeout: 5s
+  smallrye-openapi:
+    info-title: Black Hole API
+    info-version: 1.0.0

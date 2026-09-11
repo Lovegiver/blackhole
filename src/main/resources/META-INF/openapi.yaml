@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: Black Hole API
+  version: 1.0.0
+  description: Bounded API for Black Hole-owned data.
+paths:
+  /v1/content-registry/{content_hash}:
+    put:
+      operationId: registerContentHash
+      summary: Atomically register or return a canonical content hash
+      description: The registry knows only whether the hash has already been registered. It stores no content or analysis state.
+      parameters:
+        - name: content_hash
+          in: path
+          required: true
+          description: Lowercase hexadecimal SHA-256 of the final canonical content.
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+            minLength: 64
+            maxLength: 64
+      responses:
+        '201':
+          description: The hash was registered by this request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentRegistryResponse'
+        '200':
+          description: The hash was already registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentRegistryResponse'
+        '400':
+          description: The hash is not a lowercase hexadecimal SHA-256.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: The registry database is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  schemas:
+    ContentRegistryResponse:
+      type: object
+      required: [content_id, content_hash, result, registered_at]
+      additionalProperties: false
+      properties:
+        content_id:
+          type: string
+          format: uuid
+        content_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          minLength: 64
+          maxLength: 64
+        result:
+          type: string
+          enum: [NEW, KNOWN]
+        registered_at:
+          type: string
+          format: date-time
+    ApiError:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string

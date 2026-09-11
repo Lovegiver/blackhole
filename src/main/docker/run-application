@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+secret_file=${BLACKHOLE_DB_PASSWORD_FILE:-/run/secrets/blackhole_db_password}
+
+[ -r "$secret_file" ] || {
+  printf 'Black Hole database secret is unreadable.\n' >&2
+  exit 1
+}
+
+export QUARKUS_DATASOURCE_PASSWORD
+QUARKUS_DATASOURCE_PASSWORD=$(cat "$secret_file")
+
+exec /opt/jboss/container/java/run/run-java.sh
