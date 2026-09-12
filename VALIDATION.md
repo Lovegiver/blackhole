@@ -13,6 +13,16 @@ effets par des lectures JDBC indépendantes.
 ./mvnw test
 ```
 
+La preuve CI complète, reproductible localement avec Java 21 et Docker, est :
+
+```shell
+bash scripts/ci.sh
+```
+
+Elle ajoute au rejeu applicatif le packaging et la construction sans
+publication des deux images. Tous les conteneurs PostgreSQL des tests sont
+créés et détruits par Testcontainers ; aucune base DEV ou PROD n'est utilisée.
+
 Le rejeu du 12 septembre 2026 est `PASS` : 68 tests, 0 échec, avec la
 migration V2 appliquée sur PostgreSQL 18.6 Testcontainers.
 

@@ -75,6 +75,20 @@ docker build -f src/main/docker/Dockerfile.jvm -t labia/blackhole-dev:0.2.0 .
 docker build -f src/main/docker/Dockerfile.migration -t labia/blackhole-migrations:0.2.0 .
 ```
 
+La commande locale appelée par GitHub Actions regroupe exactement ces preuves :
+
+```shell
+bash scripts/ci.sh
+```
+
+Le workflow `.github/workflows/ci.yml` s'exécute pour chaque pull request vers
+`master` et chaque push sur `master`. Il utilise Java 21 et le Maven Wrapper,
+exécute les tests PostgreSQL/Testcontainers et Flyway, package l'application,
+puis construit réellement les images applicative et migration. Il ne publie
+aucune image, ne déploie rien et ne contacte aucune instance Lab-IA, DEV, PROD
+ou LAN. Les futures protections de branche pourront rendre le check
+`Kotlin, PostgreSQL and Docker` obligatoire après validation de son nom.
+
 La suite lance un PostgreSQL 18.6 isolé avec Testcontainers, applique la vraie
 migration avec un rôle migrateur distinct, démarre l'API Quarkus avec le rôle
 runtime puis couvre les appels séquentiels et concurrents, les rejets, les
