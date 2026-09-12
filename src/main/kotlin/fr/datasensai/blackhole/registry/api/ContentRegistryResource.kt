@@ -3,7 +3,9 @@ package fr.datasensai.blackhole.registry.api
 import com.fasterxml.jackson.annotation.JsonProperty
 import fr.datasensai.blackhole.registry.application.ContentRegistryService
 import fr.datasensai.blackhole.registry.domain.ContentRegistration
+import fr.datasensai.blackhole.registry.domain.RegistrationOutcome
 import fr.datasensai.blackhole.registry.domain.RegistrationResult
+import jakarta.ws.rs.HeaderParam
 import jakarta.ws.rs.PUT
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.PathParam
@@ -22,11 +24,15 @@ class ContentRegistryResource(
 
     @PUT
     @Path("/{content_hash}")
-    fun register(@PathParam("content_hash") contentHash: String): Response {
-        val registration = service.register(contentHash)
-        val status = when (registration.result) {
-            RegistrationResult.NEW -> Response.Status.CREATED
-            RegistrationResult.KNOWN -> Response.Status.OK
+    fun register(
+        @PathParam("content_hash") contentHash: String,
+        @HeaderParam("Idempotency-Key") idempotencyKey: String?
+    ): Response {
+        val registration = service.register(contentHash, idempotencyKey)
+        val status = if (registration.outcome == RegistrationOutcome.CREATED) {
+            Response.Status.CREATED
+        } else {
+            Response.Status.OK
         }
         return Response.status(status)
             .entity(ContentRegistryResponse.from(registration))

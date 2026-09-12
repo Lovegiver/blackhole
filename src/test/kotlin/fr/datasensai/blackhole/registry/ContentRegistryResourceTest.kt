@@ -16,6 +16,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.sql.SQLException
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import javax.sql.DataSource
@@ -39,16 +40,17 @@ class ContentRegistryResourceTest {
     private val httpClient = HttpClient.newHttpClient()
 
     @Test
-    fun `first registration is NEW and replay is stable KNOWN`() {
+    fun `first registration and same operation replay are stable NEW`() {
         val contentHash = hash('1')
+        val idempotencyKey = key(1)
 
-        val first = put(contentHash)
-        val replay = put(contentHash)
+        val first = put(contentHash, idempotencyKey)
+        val replay = put(contentHash, idempotencyKey)
 
         assertEquals(201, first.status)
         assertEquals("NEW", first.body["result"].asText())
         assertEquals(200, replay.status)
-        assertEquals("KNOWN", replay.body["result"].asText())
+        assertEquals("NEW", replay.body["result"].asText())
         assertEquals(first.body["content_id"].asText(), replay.body["content_id"].asText())
         assertEquals(first.body["registered_at"].asText(), replay.body["registered_at"].asText())
         assertEquals(contentHash, replay.body["content_hash"].asText())
@@ -56,8 +58,35 @@ class ContentRegistryResourceTest {
     }
 
     @Test
-    fun `concurrent identical registrations produce exactly one NEW`() {
+    fun `another operation for the same hash is KNOWN`() {
+        val contentHash = hash('b')
+        val first = put(contentHash, key(2))
+        val otherOperation = put(contentHash, key(3))
+
+        assertEquals(201, first.status)
+        assertEquals("NEW", first.body["result"].asText())
+        assertEquals(200, otherOperation.status)
+        assertEquals("KNOWN", otherOperation.body["result"].asText())
+        assertEquals(first.body["content_id"].asText(), otherOperation.body["content_id"].asText())
+        assertEquals(first.body["registered_at"].asText(), otherOperation.body["registered_at"].asText())
+    }
+
+    @Test
+    fun `same key for another hash is conflict`() {
+        val idempotencyKey = key(4)
+        assertEquals(201, put(hash('c'), idempotencyKey).status)
+
+        val conflict = put(hash('d'), idempotencyKey)
+
+        assertEquals(409, conflict.status)
+        assertEquals("IDEMPOTENCY_KEY_CONFLICT", conflict.body["code"].asText())
+        assertEquals(0, countRows(hash('d')))
+    }
+
+    @Test
+    fun `concurrent identical operation produces one creation and only NEW replays`() {
         val contentHash = hash('2')
+        val idempotencyKey = key(5)
         val callCount = 16
         val ready = CountDownLatch(callCount)
         val start = CountDownLatch(1)
@@ -68,7 +97,7 @@ class ContentRegistryResourceTest {
                 executor.submit<RegistryHttpResponse> {
                     ready.countDown()
                     start.await()
-                    put(contentHash)
+                    put(contentHash, idempotencyKey)
                 }
             }
             ready.await()
@@ -77,7 +106,7 @@ class ContentRegistryResourceTest {
 
             assertEquals(1, responses.count { it.status == 201 })
             assertEquals(callCount - 1, responses.count { it.status == 200 })
-            assertEquals(setOf("NEW", "KNOWN"), responses.map { it.body["result"].asText() }.toSet())
+            assertEquals(setOf("NEW"), responses.map { it.body["result"].asText() }.toSet())
             assertEquals(1, responses.map { it.body["content_id"].asText() }.toSet().size)
             assertEquals(1, responses.map { it.body["registered_at"].asText() }.toSet().size)
             assertEquals(1, countRows(contentHash))
@@ -87,8 +116,38 @@ class ContentRegistryResourceTest {
     }
 
     @Test
-    fun `concurrent distinct registrations remain distinct`() {
-        val hashes = ('3'..'9').map(::hash)
+    fun `concurrent distinct operations for the same hash produce one NEW`() {
+        val contentHash = hash('3')
+        val callCount = 12
+        val ready = CountDownLatch(callCount)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(callCount)
+
+        try {
+            val futures = (1..callCount).map { index ->
+                executor.submit<RegistryHttpResponse> {
+                    ready.countDown()
+                    start.await()
+                    put(contentHash, key(100 + index))
+                }
+            }
+            ready.await()
+            start.countDown()
+            val responses = futures.map { it.get() }
+
+            assertEquals(1, responses.count { it.status == 201 && it.body["result"].asText() == "NEW" })
+            assertEquals(callCount - 1, responses.count { it.status == 200 && it.body["result"].asText() == "KNOWN" })
+            assertEquals(1, responses.map { it.body["content_id"].asText() }.toSet().size)
+            assertEquals(1, countRows(contentHash))
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `concurrent different hashes for the same key produce one NEW and conflicts`() {
+        val hashes = ('4'..'9').map(::hash)
+        val idempotencyKey = key(200)
         val ready = CountDownLatch(hashes.size)
         val start = CountDownLatch(1)
         val executor = Executors.newFixedThreadPool(hashes.size)
@@ -98,17 +157,16 @@ class ContentRegistryResourceTest {
                 executor.submit<RegistryHttpResponse> {
                     ready.countDown()
                     start.await()
-                    put(contentHash)
+                    put(contentHash, idempotencyKey)
                 }
             }
             ready.await()
             start.countDown()
             val responses = futures.map { it.get() }
 
-            assertTrue(responses.all { it.status == 201 })
-            assertTrue(responses.all { it.body["result"].asText() == "NEW" })
-            assertEquals(hashes.size, responses.map { it.body["content_id"].asText() }.toSet().size)
-            hashes.forEach { assertEquals(1, countRows(it)) }
+            assertEquals(1, responses.count { it.status == 201 && it.body["result"].asText() == "NEW" })
+            assertEquals(hashes.size - 1, responses.count { it.status == 409 })
+            assertEquals(1, hashes.sumOf(::countRows))
         } finally {
             executor.shutdownNow()
         }
@@ -119,7 +177,7 @@ class ContentRegistryResourceTest {
         val invalidHash = "A".repeat(64)
         val before = countAllRows()
 
-        val response = put(invalidHash)
+        val response = put(invalidHash, key(300))
 
         assertEquals(400, response.status)
         assertEquals("INVALID_CONTENT_HASH", response.body["code"].asText())
@@ -127,16 +185,33 @@ class ContentRegistryResourceTest {
     }
 
     @Test
+    fun `missing or invalid idempotency key is rejected without insertion`() {
+        val missingHash = hash('e')
+        val invalidHash = hash('f')
+        val before = countAllRows()
+
+        val missing = put(missingHash, null)
+        val invalid = put(invalidHash, "not-a-uuid")
+
+        assertEquals(400, missing.status)
+        assertEquals("INVALID_IDEMPOTENCY_KEY", missing.body["code"].asText())
+        assertEquals(400, invalid.status)
+        assertEquals("INVALID_IDEMPOTENCY_KEY", invalid.body["code"].asText())
+        assertEquals(before, countAllRows())
+    }
+
+    @Test
     fun `PostgreSQL uniqueness and runtime least privilege are effective`() {
         val contentHash = hash('a')
-        assertEquals(201, put(contentHash).status)
+        assertEquals(201, put(contentHash, key(400)).status)
 
         dataSource.connection.use { connection ->
             val duplicate = assertThrows(SQLException::class.java) {
                 connection.prepareStatement(
-                    "INSERT INTO blackhole.content_registry (content_hash) VALUES (?)"
+                    "INSERT INTO blackhole.content_registry (content_hash, idempotency_key) VALUES (?, ?)"
                 ).use { statement ->
                     statement.setString(1, contentHash)
+                    statement.setObject(2, UUID.fromString(key(401)))
                     statement.executeUpdate()
                 }
             }
@@ -160,16 +235,21 @@ class ContentRegistryResourceTest {
         assertNotEquals(null, operation)
         assertNotEquals(null, operation["responses"]["200"])
         assertNotEquals(null, operation["responses"]["201"])
+        assertNotEquals(null, operation["responses"]["409"])
+        val idempotencyHeader = operation["parameters"].first { it["name"].asText() == "Idempotency-Key" }
+        assertTrue(idempotencyHeader["required"].asBoolean())
         val resultEnum = specification["components"]["schemas"]["ContentRegistryResponse"]
             .get("properties").get("result").get("enum")
         val results = resultEnum.map(JsonNode::asText)
         assertEquals(listOf("NEW", "KNOWN"), results)
     }
 
-    private fun put(contentHash: String): RegistryHttpResponse {
-        val request = HttpRequest.newBuilder(
+    private fun put(contentHash: String, idempotencyKey: String?): RegistryHttpResponse {
+        val builder = HttpRequest.newBuilder(
             baseUri.resolve("v1/content-registry/$contentHash")
-        ).PUT(HttpRequest.BodyPublishers.noBody()).build()
+        )
+        if (idempotencyKey != null) builder.header("Idempotency-Key", idempotencyKey)
+        val request = builder.PUT(HttpRequest.BodyPublishers.noBody()).build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         return RegistryHttpResponse(
             status = response.statusCode(),
@@ -208,6 +288,8 @@ class ContentRegistryResourceTest {
     }
 
     private fun hash(character: Char): String = character.toString().repeat(64)
+
+    private fun key(value: Int): String = "00000000-0000-4000-8000-${value.toString().padStart(12, '0')}"
 
     private data class RegistryHttpResponse(
         val status: Int,

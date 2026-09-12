@@ -9,6 +9,7 @@ Le premier vertical slice durable expose :
 
 ```http
 PUT /v1/content-registry/{content_hash}
+Idempotency-Key: <UUID>
 ```
 
 `content_hash` est exactement le SHA-256 hexadécimal minuscule, sur 64
@@ -16,8 +17,13 @@ caractères, du contenu canonique. Le registre connaît uniquement la présence 
 ce hash : il ne stocke ni article, ni occurrence, ni artefact, ni état
 d'analyse.
 
-Le premier appel répond `201 Created` avec `NEW`. Tout replay répond `200 OK`
-avec `KNOWN`, le même `content_id` et le même `registered_at` :
+Le header `Idempotency-Key` est obligatoire. Black Hole le valide comme UUID
+canonique puis le traite comme une clé opaque, sans dépendance au modèle
+Acquisition. Le premier appel d'une opération répond `201 Created` avec `NEW`.
+Le replay du même couple clé/hash répond `200 OK` avec `NEW`, le même
+`content_id` et le même `registered_at`. Une autre clé sur ce hash reçoit
+`200 / KNOWN`; la réutilisation de la même clé pour un autre hash reçoit
+`409 Conflict` :
 
 ```json
 {
@@ -28,23 +34,26 @@ avec `KNOWN`, le même `content_id` et le même `registered_at` :
 }
 ```
 
-Un hash invalide reçoit `400 Bad Request`. Une indisponibilité PostgreSQL
-reçoit une erreur `503` sûre, sans détail interne. Le contrat OpenAPI versionné
+Un hash ou une clé invalide ou absente reçoit `400 Bad Request`. Une
+indisponibilité PostgreSQL reçoit une erreur `503` sûre, sans détail interne.
+Le contrat OpenAPI versionné
 se trouve dans `src/main/resources/META-INF/openapi.yaml` et est servi par
 Quarkus sous `/q/openapi`.
 
 ## Atomicité et persistance
 
 La migration Flyway `V1__create_content_registry.sql` crée le schéma
-`blackhole` et son unique table métier :
+`blackhole` et son unique table métier. La migration append-only V2 ajoute la
+clé d'idempotence unique :
 
 ```text
-content_registry(id UUID, content_hash CHAR(64), registered_at TIMESTAMPTZ)
+content_registry(id UUID, content_hash CHAR(64), idempotency_key UUID, registered_at TIMESTAMPTZ)
 ```
 
 L'API ouvre une transaction courte en isolation `READ COMMITTED`. Le repository
 exécute `INSERT ... ON CONFLICT DO NOTHING RETURNING`; lorsque rien n'est
-inséré, une nouvelle instruction lit le gagnant concurrent avant le commit.
+inséré, une nouvelle instruction lit d'abord l'association de la clé, puis le
+gagnant du hash concurrent, avant le commit.
 Il n'effectue ni `SELECT` préalable, ni faux `UPDATE`, ni verrou consultatif.
 
 Flyway a été choisi parce qu'il est directement intégré au stack Quarkus/JDBC
@@ -62,8 +71,8 @@ PostgreSQL Black Hole et utilise uniquement l'API bornée.
 ```shell
 ./mvnw test
 ./mvnw package
-docker build -f src/main/docker/Dockerfile.jvm -t labia/blackhole-dev:0.1.0 .
-docker build -f src/main/docker/Dockerfile.migration -t labia/blackhole-migrations:0.1.0 .
+docker build -f src/main/docker/Dockerfile.jvm -t labia/blackhole-dev:0.2.0 .
+docker build -f src/main/docker/Dockerfile.migration -t labia/blackhole-migrations:0.2.0 .
 ```
 
 La suite lance un PostgreSQL 18.6 isolé avec Testcontainers, applique la vraie
