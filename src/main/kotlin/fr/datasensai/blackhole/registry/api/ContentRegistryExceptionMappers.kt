@@ -1,6 +1,8 @@
 package fr.datasensai.blackhole.registry.api
 
 import fr.datasensai.blackhole.registry.domain.InvalidContentHashException
+import fr.datasensai.blackhole.registry.domain.InvalidIdempotencyKeyException
+import fr.datasensai.blackhole.registry.infrastructure.IdempotencyKeyConflictException
 import fr.datasensai.blackhole.registry.infrastructure.ContentRegistryUnavailableException
 import jakarta.ws.rs.core.MediaType
 import jakarta.ws.rs.core.Response
@@ -14,6 +16,24 @@ class InvalidContentHashExceptionMapper : ExceptionMapper<InvalidContentHashExce
         Response.status(Response.Status.BAD_REQUEST)
             .type(MediaType.APPLICATION_JSON_TYPE)
             .entity(ApiError("INVALID_CONTENT_HASH", exception.message!!))
+            .build()
+}
+
+@Provider
+class InvalidIdempotencyKeyExceptionMapper : ExceptionMapper<InvalidIdempotencyKeyException> {
+    override fun toResponse(exception: InvalidIdempotencyKeyException): Response =
+        Response.status(Response.Status.BAD_REQUEST)
+            .type(MediaType.APPLICATION_JSON_TYPE)
+            .entity(ApiError("INVALID_IDEMPOTENCY_KEY", exception.message!!))
+            .build()
+}
+
+@Provider
+class IdempotencyKeyConflictExceptionMapper : ExceptionMapper<IdempotencyKeyConflictException> {
+    override fun toResponse(exception: IdempotencyKeyConflictException): Response =
+        Response.status(Response.Status.CONFLICT)
+            .type(MediaType.APPLICATION_JSON_TYPE)
+            .entity(ApiError("IDEMPOTENCY_KEY_CONFLICT", exception.message!!))
             .build()
 }
 

@@ -7,8 +7,8 @@ paths:
   /v1/content-registry/{content_hash}:
     put:
       operationId: registerContentHash
-      summary: Atomically register or return a canonical content hash
-      description: The registry knows only whether the hash has already been registered. It stores no content or analysis state.
+      summary: Idempotently register or return a canonical content hash
+      description: The registry knows only whether the hash has already been registered. The idempotency key identifies one caller operation and stores no Acquisition semantics, content, or analysis state.
       parameters:
         - name: content_hash
           in: path
@@ -19,21 +19,34 @@ paths:
             pattern: '^[0-9a-f]{64}$'
             minLength: 64
             maxLength: 64
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Canonical UUID used as an opaque operation key.
+          schema:
+            type: string
+            format: uuid
       responses:
         '201':
-          description: The hash was registered by this request.
+          description: The hash was registered by this operation.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContentRegistryResponse'
         '200':
-          description: The hash was already registered.
+          description: The same operation was replayed with result NEW, or another operation had already registered the hash with result KNOWN.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContentRegistryResponse'
         '400':
-          description: The hash is not a lowercase hexadecimal SHA-256.
+          description: The hash or Idempotency-Key is invalid or missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The Idempotency-Key is already associated with another hash.
           content:
             application/json:
               schema:
